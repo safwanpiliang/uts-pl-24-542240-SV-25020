@@ -1,0 +1,13 @@
+@import "tailwindcss";
+@import "./tokens.css";
+@import "@fontsource-variable/plus-jakarta-sans";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-neutral-400);
+  color: var(--color-neutral-1000);
+}
