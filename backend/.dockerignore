@@ -1,0 +1,23 @@
+.git
+.gitignore
+.gitattributes
+.editorconfig
+
+# dependensi dipasang ulang di dalam image
+vendor
+node_modules
+
+# rahasia dan konfigurasi lokal tidak boleh masuk image
+.env
+.env.*
+!.env.example
+
+# artefak lokal
+database/database.sqlite
+storage/logs/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+tests
+Dockerfile
+.dockerignore
