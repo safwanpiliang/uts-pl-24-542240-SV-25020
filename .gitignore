@@ -1,0 +1,14 @@
+# env & secrets
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# dependencies & build
+node_modules/
+vendor/
+dist/
