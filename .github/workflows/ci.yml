@@ -69,3 +69,64 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # Hanya berjalan untuk push ke main. Pull request, branch dev, dan branch
+  # fitur berhenti setelah test-backend dan build-frontend.
+  deploy:
+    name: deploy
+    needs: [test-backend, build-frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      REGISTRY: ghcr.io
+    steps:
+      - uses: actions/checkout@v4
+
+      # Nilai rahasia diambil dari GitHub Secrets, tidak ada di repository.
+      - name: Smoke test seluruh sistem
+        env:
+          APP_KEY: ${{ secrets.APP_KEY }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          SEED_USER_PASSWORD: ${{ secrets.SEED_USER_PASSWORD }}
+        run: sh scripts/smoke-test.sh
+
+      # Nama image di GHCR harus huruf kecil.
+      - name: Tentukan nama image
+        id: names
+        run: |
+          owner="$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
+          echo "backend=${REGISTRY}/${owner}/jadwalku-backend" >> "$GITHUB_OUTPUT"
+          echo "frontend=${REGISTRY}/${owner}/jadwalku-frontend" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tag memakai nomor commit, bukan latest. Label source menghubungkan
+      # package ke repository ini (muncul di halaman Packages).
+      - name: Build dan push image backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ steps.names.outputs.backend }}:${{ github.sha }}
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
+
+      - name: Build dan push image frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ steps.names.outputs.frontend }}:${{ github.sha }}
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
