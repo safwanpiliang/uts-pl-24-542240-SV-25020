@@ -1,14 +1,16 @@
+# Server aplikasi: FrankenPHP (Caddy + PHP) menggantikan `php artisan serve`.
 # Versi dipin eksplisit (bukan latest) supaya build selalu sama.
-FROM php:8.4.26-cli-alpine3.24
+FROM dunglas/frankenphp:1.13.0-php8.4.26-alpine
 
 # Ekstensi PHP untuk PostgreSQL
-RUN apk add --no-cache libpq postgresql-dev \
-    && docker-php-ext-install pdo_pgsql \
-    && apk del --no-cache postgresql-dev
+RUN install-php-extensions pdo_pgsql
 
 COPY --from=composer:2.8.12 /usr/bin/composer /usr/bin/composer
 
-WORKDIR /var/www/html
+# Konfigurasi PHP untuk produksi
+RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
+
+WORKDIR /app
 
 # 1) Salin hanya composer.json dan composer.lock, lalu pasang dependensi.
 #    Layer ini hanya dibangun ulang kalau dua file itu berubah, bukan tiap
@@ -20,14 +22,21 @@ RUN composer install --no-dev --no-interaction --prefer-dist \
 # 2) Baru salin kode aplikasi.
 COPY . .
 
+COPY docker/Caddyfile /etc/caddy/Caddyfile
+
 RUN composer dump-autoload --optimize --no-dev --no-interaction \
     && mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
-    && chown -R www-data:www-data storage bootstrap/cache \
+    && chown -R www-data:www-data storage bootstrap/cache /data/caddy /config/caddy \
     && chmod +x docker/entrypoint.sh
 
 USER www-data
 
 EXPOSE 8000
 
-ENTRYPOINT ["/var/www/html/docker/entrypoint.sh"]
-CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
+# Healthcheck bawaan image dasar mengetuk Caddy admin API (port 2019) yang
+# dimatikan di Caddyfile, jadi diganti dengan endpoint /up milik Laravel.
+HEALTHCHECK --interval=10s --timeout=3s --start-period=40s --retries=5 \
+  CMD curl -fsS http://localhost:8000/up || exit 1
+
+ENTRYPOINT ["/app/docker/entrypoint.sh"]
+CMD ["frankenphp", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
