@@ -1,0 +1,22 @@
+{
+	skip_install_trust
+	admin off
+	auto_https off
+	frankenphp
+}
+
+:8000 {
+	root * /app/public
+	encode zstd gzip
+
+	# Penanda di setiap respons bahwa permintaan dilayani FrankenPHP.
+	header X-Served-By FrankenPHP
+
+	# Log akses ke stdout, terbaca lewat `docker compose logs backend`.
+	log {
+		output stdout
+		format console
+	}
+
+	php_server
+}
