@@ -1,0 +1,13 @@
+groups:
+  - name: ketersediaan
+    rules:
+      - alert: LayananMati
+        # up bernilai 0 kalau Prometheus gagal mengambil metrik dari target itu.
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Layanan {{ $labels.job }} tidak merespons"
+          description: "Target {{ $labels.instance }} (job {{ $labels.job }}) gagal di-scrape selama lebih dari 1 menit."
+          tindakan_pertama: "Jalankan 'docker compose ps' untuk melihat container mana yang berhenti, lalu 'docker compose logs --tail=50 {{ $labels.job }}' untuk membaca sebabnya. Kalau container berhenti, nyalakan dengan 'docker compose start {{ $labels.job }}'."
