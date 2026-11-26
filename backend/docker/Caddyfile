@@ -3,6 +3,11 @@
 	admin off
 	auto_https off
 	frankenphp
+
+	# Kumpulkan metrik HTTP (jumlah permintaan, durasi) untuk Prometheus.
+	servers {
+		metrics
+	}
 }
 
 :8000 {
@@ -18,5 +23,12 @@
 		format console
 	}
 
-	php_server
+	# Metrik untuk Prometheus. Isinya hanya hitungan dan durasi permintaan, tanpa data pengguna.
+	handle /metrics {
+		metrics
+	}
+
+	handle {
+		php_server
+	}
 }
