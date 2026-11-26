@@ -32,9 +32,11 @@ SEED_USER_EMAIL=$SEED_USER_EMAIL
 SEED_USER_PASSWORD=$SEED_USER_PASSWORD
 FRONTEND_PORT=$FRONTEND_PORT
 BACKEND_PORT=$BACKEND_PORT
+GRAFANA_ADMIN_PASSWORD=$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')
 EOT
 
-compose up -d --build
+# Hanya layanan aplikasi; layanan pemantau tidak diperlukan untuk smoke test.
+compose up -d --build db backend frontend
 
 echo "Menunggu backend siap..."
 ready=0
