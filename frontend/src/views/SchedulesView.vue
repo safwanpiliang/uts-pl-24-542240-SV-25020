@@ -13,6 +13,7 @@ import Sidebar from '../components/ui/Sidebar.vue'
 import StatCard from '../components/ui/StatCard.vue'
 import Table from '../components/ui/Table.vue'
 import { AddCircleIcon } from '@solar-icons/vue/bold-duotone/add-circle'
+import { AlarmAddIcon } from '@solar-icons/vue/bold-duotone/alarm-add'
 import { CheckCircleIcon } from '@solar-icons/vue/bold-duotone/check-circle'
 import { ClockCircleIcon } from '@solar-icons/vue/bold-duotone/clock-circle'
 import { CloseCircleIcon } from '@solar-icons/vue/bold-duotone/close-circle'
@@ -66,7 +67,7 @@ const columns = [
   { key: 'when', header: 'Waktu' },
   { key: 'location', header: 'Lokasi' },
   { key: 'status', header: 'Status', align: 'center', width: '130px' },
-  { key: 'actions', header: 'Aksi', align: 'center', width: '110px' },
+  { key: 'actions', header: 'Aksi', align: 'center', width: '150px' },
 ]
 
 // ---- format tanggal ----
@@ -234,6 +235,76 @@ async function confirmDelete() {
     deleting.value = false
   }
 }
+
+// ---- pengingat ----
+const MAX_REMINDERS = 3
+const reminderTarget = ref(null)
+const reminders = ref([])
+const remindersLoading = ref(false)
+const reminderError = ref('')
+const newMinutes = ref('')
+const addingReminder = ref(false)
+
+function formatRemindAt(iso) {
+  const d = new Date(iso)
+  return `${dateFmt.format(d)}, ${formatTime(d)}`
+}
+
+function describeOffset(minutes) {
+  if (minutes % 1440 === 0) return `${minutes / 1440} hari sebelum mulai`
+  if (minutes % 60 === 0) return `${minutes / 60} jam sebelum mulai`
+  return `${minutes} menit sebelum mulai`
+}
+
+async function loadReminders() {
+  const { data } = await api.get(`/schedules/${reminderTarget.value.id}/reminders`)
+  reminders.value = data.data
+}
+
+async function openReminders(schedule) {
+  reminderTarget.value = schedule
+  reminders.value = []
+  reminderError.value = ''
+  newMinutes.value = ''
+  remindersLoading.value = true
+  try {
+    await loadReminders()
+  } catch (error) {
+    if (error.response?.status !== 401) reminderError.value = 'Pengingat gagal dimuat. Coba lagi.'
+  } finally {
+    remindersLoading.value = false
+  }
+}
+
+async function addReminder() {
+  reminderError.value = ''
+  addingReminder.value = true
+  try {
+    await api.post(`/schedules/${reminderTarget.value.id}/reminders`, {
+      minutes_before: newMinutes.value === '' ? null : Number(newMinutes.value),
+    })
+    newMinutes.value = ''
+    await loadReminders()
+  } catch (error) {
+    if (error.response?.status === 422) {
+      reminderError.value = error.response.data.errors?.minutes_before?.[0] ?? 'Pengingat tidak valid.'
+    } else if (error.response?.status !== 401) {
+      reminderError.value = 'Pengingat gagal ditambahkan. Coba lagi.'
+    }
+  } finally {
+    addingReminder.value = false
+  }
+}
+
+async function deleteReminder(reminder) {
+  reminderError.value = ''
+  try {
+    await api.delete(`/schedules/${reminderTarget.value.id}/reminders/${reminder.id}`)
+    await loadReminders()
+  } catch (error) {
+    if (error.response?.status !== 401) reminderError.value = 'Pengingat gagal dihapus. Coba lagi.'
+  }
+}
 </script>
 
 <template>
@@ -332,6 +403,9 @@ async function confirmDelete() {
 
         <template #cell-actions="{ row }">
           <div class="flex items-center gap-1">
+            <Button variant="ghost" size="sm" aria-label="Atur pengingat" @click="openReminders(row)">
+              <template #icon-left><AlarmAddIcon /></template>
+            </Button>
             <Button variant="ghost" size="sm" aria-label="Ubah jadwal" @click="openEdit(row)">
               <template #icon-left><PenIcon /></template>
             </Button>
@@ -384,6 +458,52 @@ async function confirmDelete() {
     <template #actions>
       <Button theme="neutral" variant="outline" :disabled="saving" @click="formOpen = false">Batal</Button>
       <Button type="submit" form="schedule-form" :disabled="saving">{{ saving ? 'Menyimpan...' : 'Simpan' }}</Button>
+    </template>
+  </Modal>
+
+  <Modal
+    :open="reminderTarget !== null"
+    title="Pengingat jadwal"
+    :description="reminderTarget ? `“${reminderTarget.title}” mulai ${formatRemindAt(reminderTarget.start_at)}` : ''"
+    panel-class="w-[480px]"
+    @close="reminderTarget = null"
+  >
+    <div class="flex flex-col gap-4">
+      <Alert v-if="reminderError" status="error" :description="reminderError">
+        <template #icon><DangerCircleIcon /></template>
+      </Alert>
+
+      <p v-if="remindersLoading" class="text-b3 text-neutral-800">Memuat pengingat...</p>
+      <p v-else-if="!reminders.length" class="text-b3 text-neutral-800">
+        Belum ada pengingat. Maksimal {{ MAX_REMINDERS }} per jadwal.
+      </p>
+      <ul v-else class="flex flex-col gap-2">
+        <li
+          v-for="r in reminders"
+          :key="r.id"
+          class="flex items-center justify-between gap-3 rounded-lg border border-neutral-300 px-3 py-2"
+        >
+          <div class="min-w-0">
+            <p class="text-b2 font-bold text-neutral-1000">{{ describeOffset(r.minutes_before) }}</p>
+            <p class="text-b4 text-neutral-800">Diingatkan {{ formatRemindAt(r.remind_at) }}</p>
+          </div>
+          <Button theme="error" variant="ghost" size="sm" aria-label="Hapus pengingat" @click="deleteReminder(r)">
+            <template #icon-left><TrashBinMinimalisticIcon /></template>
+          </Button>
+        </li>
+      </ul>
+
+      <form class="flex items-end gap-2" novalidate @submit.prevent="addReminder">
+        <div class="flex-1">
+          <Input v-model="newMinutes" label="Menit sebelum mulai" type="number" placeholder="Contoh: 30" />
+        </div>
+        <Button type="submit" :disabled="addingReminder">{{ addingReminder ? 'Menambah...' : 'Tambah' }}</Button>
+      </form>
+      <p class="text-b4 text-neutral-800">{{ reminders.length }} dari {{ MAX_REMINDERS }} pengingat terpakai.</p>
+    </div>
+
+    <template #actions>
+      <Button theme="neutral" variant="outline" @click="reminderTarget = null">Tutup</Button>
     </template>
   </Modal>
 
