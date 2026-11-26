@@ -9,6 +9,7 @@ use App\Models\Schedule;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Log;
 
 class ScheduleController extends Controller
 {
@@ -22,6 +23,12 @@ class ScheduleController extends Controller
     public function store(ScheduleRequest $request): JsonResponse
     {
         $schedule = $request->user()->schedules()->create($request->validated());
+
+        Log::info('jadwal dibuat', [
+            'event' => 'schedule.created',
+            'user_id' => $request->user()->id,
+            'schedule_id' => $schedule->id,
+        ]);
 
         return (new ScheduleResource($schedule->refresh()))
             ->response()
@@ -38,12 +45,24 @@ class ScheduleController extends Controller
         $schedule = $this->findOwned($request, $id);
         $schedule->update($request->validated());
 
+        Log::info('jadwal diperbarui', [
+            'event' => 'schedule.updated',
+            'user_id' => $request->user()->id,
+            'schedule_id' => $schedule->id,
+        ]);
+
         return new ScheduleResource($schedule);
     }
 
     public function destroy(Request $request, int $id): JsonResponse
     {
         $this->findOwned($request, $id)->delete();
+
+        Log::info('jadwal dihapus', [
+            'event' => 'schedule.deleted',
+            'user_id' => $request->user()->id,
+            'schedule_id' => $id,
+        ]);
 
         return response()->json(['message' => 'Jadwal berhasil dihapus.']);
     }
