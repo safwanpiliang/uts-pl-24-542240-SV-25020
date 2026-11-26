@@ -10,16 +10,28 @@ use Closure;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class ReminderController extends Controller
 {
+    public function index(Request $request, int $schedule): AnonymousResourceCollection
+    {
+        $reminders = $this->ownedSchedule($request, $schedule)
+            ->reminders()
+            ->with('schedule')
+            ->orderByDesc('minutes_before')
+            ->get();
+
+        return ReminderResource::collection($reminders);
+    }
+
     public function store(Request $request, int $schedule): JsonResponse
     {
         // Jadwal milik orang lain dijawab 404 lebih dulu, sebelum validasi.
-        $schedule = $request->user()->schedules()->findOrFail($schedule);
+        $schedule = $this->ownedSchedule($request, $schedule);
 
         $data = $request->validate([
             'minutes_before' => [
@@ -36,6 +48,18 @@ class ReminderController extends Controller
         $reminder = $this->createWithinLimit($schedule, (int) $data['minutes_before']);
 
         return (new ReminderResource($reminder))->response()->setStatusCode(201);
+    }
+
+    public function destroy(Request $request, int $schedule, int $reminder): JsonResponse
+    {
+        $this->ownedSchedule($request, $schedule)->reminders()->findOrFail($reminder)->delete();
+
+        return response()->json(['message' => 'Pengingat berhasil dihapus.']);
+    }
+
+    private function ownedSchedule(Request $request, int $id): Schedule
+    {
+        return $request->user()->schedules()->findOrFail($id);
     }
 
     private function mustStillBeInTheFuture(Schedule $schedule): Closure
