@@ -1,0 +1,148 @@
+openapi: 3.0.3
+info:
+  title: Jadwalku - Pengingat Jadwal
+  version: 1.0.0
+  description: Endpoint pengingat untuk jadwal pribadi. Semua endpoint butuh token Sanctum.
+
+servers:
+  - url: http://localhost:8000/api
+
+security:
+  - bearerAuth: []
+
+paths:
+  /schedules/{schedule}/reminders:
+    parameters:
+      - $ref: "#/components/parameters/ScheduleId"
+    get:
+      summary: Daftar pengingat sebuah jadwal
+      responses:
+        "200":
+          description: Daftar pengingat, diurutkan dari yang paling jauh dari waktu mulai.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Reminder"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      summary: Tambah pengingat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [minutes_before]
+              properties:
+                minutes_before:
+                  type: integer
+                  minimum: 1
+                  maximum: 10080
+                  example: 30
+      responses:
+        "201":
+          description: Pengingat dibuat.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Reminder"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: >
+            Validasi gagal: minutes_before bukan bilangan bulat 1-10080, sudah
+            dipakai pengingat lain pada jadwal ini, remind_at sudah lewat, atau
+            jadwal sudah memiliki 3 pengingat.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+
+  /schedules/{schedule}/reminders/{reminder}:
+    parameters:
+      - $ref: "#/components/parameters/ScheduleId"
+      - name: reminder
+        in: path
+        required: true
+        schema:
+          type: integer
+    delete:
+      summary: Hapus pengingat
+      responses:
+        "200":
+          description: Pengingat dihapus.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Pengingat berhasil dihapus.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  parameters:
+    ScheduleId:
+      name: schedule
+      in: path
+      required: true
+      schema:
+        type: integer
+
+  schemas:
+    Reminder:
+      type: object
+      properties:
+        id:
+          type: integer
+        schedule_id:
+          type: integer
+        minutes_before:
+          type: integer
+          example: 30
+        remind_at:
+          type: string
+          format: date-time
+          description: start_at jadwal dikurangi minutes_before (dihitung, tidak disimpan).
+        created_at:
+          type: string
+          format: date-time
+    ValidationError:
+      type: object
+      properties:
+        message:
+          type: string
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+
+  responses:
+    Unauthenticated:
+      description: Token tidak ada atau tidak valid.
+    NotFound:
+      description: Jadwal atau pengingat tidak ada, atau bukan milik pengguna.
