@@ -70,5 +70,62 @@ services:
       - "${FRONTEND_PORT:-8081}:80"
     logging: *default-logging
 
+  # --- Pemantauan ---------------------------------------------------------
+  # Prometheus dan Grafana hanya dibuka ke localhost (127.0.0.1), tidak ke jaringan.
+  prometheus:
+    image: prom/prometheus:v3.16.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    logging: *default-logging
+
+  grafana:
+    image: grafana/grafana:13.3.2
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      # Bukan admin/admin: password diisi sendiri di file .env.
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?isi GRAFANA_ADMIN_PASSWORD di file .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    logging: *default-logging
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.55.1
+    restart: unless-stopped
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    logging: *default-logging
+
+  node-exporter:
+    image: prom/node-exporter:v1.13.1
+    restart: unless-stopped
+    command:
+      - --path.rootfs=/host
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    logging: *default-logging
+
 volumes:
   pgdata:
+  prometheus_data:
+  grafana_data:
